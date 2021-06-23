@@ -3,3 +3,6 @@ QC procedure: sensor-temperature dependent BGC-Argo Radiometry dark corrections
 Night method preferred
 Day method 2nd
 then apply correction
+
+Save final files from Nightmethod.m and Daymethod.m and call on them in Applycorrection.m
+

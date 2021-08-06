@@ -2,3 +2,4 @@ Sensor-temperature dependent BGC-Argo Radiometry dark correction
 
 Save final files from Nightmethod.m and Daymethod.m and call on them in Applycorrection.m
 
+Applycorrection is really for comparison between the methods and should be adjusted to suit needs

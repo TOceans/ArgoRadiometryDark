@@ -1,6 +1,6 @@
 % POST-PROCESS QUALITY CONTROL BGC ARGO RADIOMETRY 
 % CALCULATE SENSOR-TEMPERATURE DEPENDENT CORRECTION
-% NIGHT METHOD
+% DAY METHOD
 % UPDATED 8.2.2021
 % author: Terence O'Brien
 % terence.obrien@maine.edu
@@ -12,22 +12,23 @@
 %% 1.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%%%% 1. LOAD DATA, ASSESS NIGHT PROFILES FOLLOWING QUALITY CONTROL PROCEDURES FROM ORGANELLI 2016
-%%%% SECTION 1 ADAPTED FROM EMMANUEL BOSS
+%%%% 1. LOAD DATA, ASSESS PROFILES FOLLOWING QUALITY CONTROL PROCEDURES FROM ORGANELLI 2016
+%%%% section 1 ADAPTED FROM EMMANUEL BOSS
+%%%% section 1 takes many minutes to run
+
 
 clear all
 close all
 %Irradiance data in W m^-2 nm^-1
 % PAR in micromol quanta m^-2 s^-1
 
-load data490.mat %- use for 490 & 412
-%load data380.mat
-%data490 = data380; % for ease- if using data 380 don't
-%                           need to change variable name throughout script
 
-% ^need to change variables throughout script when changing from 380 to 490
-% check before replacing
+load data490.mat  %use for 490 & 412
+%load data380.mat
+%data490 = data380;  % for ease- if using data 380 don't
+%                           need to change variable name throughout script
 %% 
+
 
 A=data490.Properties.VariableNames;
 for i=1:length(A)
@@ -48,10 +49,10 @@ for i=1:length(A)
     I(15,i)=isempty(find(string(A{1,i})=='BBP532'));
     I(16,i)=isempty(find(string(A{1,i})=='BBP700'));
     I(17,i)=isempty(find(string(A{1,i})=='DOWNWELLING_PAR'));
-    I(18,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE380')); %**
-    I(19,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE412')); %**
-    I(20,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE443')); 
-    I(21,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE490')); %**
+    I(18,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE380'));
+    I(19,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE412'));
+    I(20,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE443'));
+    I(21,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE490'));
     I(22,i)=isempty(find(string(A{1,i})=='WMO')); %float ID
 end
 
@@ -60,26 +61,26 @@ ind=mod(find(I'==0),47);
 ind(find(ind==0))=47;
 
 
-outNight490=zeros(1,8);
+darkout=zeros(1,8);
 counter=0;
 y=1;
 Flag1=0; %number of profiles.
 K=0; %Ed profile is Nans
-KK=0; %profile not monotonic in pressure
-KKK=0; %lat or long not in real bounds
-KKKK=0; %solar azumith angle test
-M = 0; % <5 data points in profile
+KK=0; %pressure not monotonic
+KKK=0; % lat or long not real
+KKKK=0; %solar az angle test
+M=0; % short profile
+minp = 50;
 
 for i=1:length(data490{:,1}) %analysis is performed a profile at a time
     i;
     Flag1;
     % getting the profiles and test that we want to keep them
-    Ed490=cell2mat(data490{i,ind(19)})*100;  %miltiply by 100 for comparison with Organelli's units
-                            % ^^^^^ !!! index is wavelength specific 
-                            
+    Ed490=cell2mat(data490{i,ind(21)})*100;  %miltiply by 100 for comparison with Organelli's units
+                           % ^^^^^ !!! index is wavelength specific
     p=cell2mat(data490{i,ind(4)}); T=cell2mat(data490{i,ind(5)});S=cell2mat(data490{i,ind(6)});ID=data490{i,ind(22)};
     lat=data490{i,ind(2)};lon=data490{i,ind(3)};time=data490{i,ind(1)};
-    %plot(Ed490,-p,'*')
+  %  plot(Ed490,-p,'*')
     %pause
     
     %if profile is all NaN, remove it
@@ -91,59 +92,81 @@ for i=1:length(data490{:,1}) %analysis is performed a profile at a time
     %testing that reasonable LAT and LON, if not skip
     II=find(lat<=90 & lat>=-90 & lon<=180 & lon>=-180);
     if isempty(II)  KKK=KKK+1; continue; end  
-    %testing that solar elevation is above 15degrees
+    %testing that solar elevation is above 15 degrees
     DateTimeUTC=time;
-    [Az,El] = SolarAzEl(DateTimeUTC,lat,lon,0); %(Koblick 2021)
+    [Az,El] = SolarAzEl(DateTimeUTC,lat,lon,0);
     %detect only reasonable values
-    if El >0   KKKK=KKKK+1; continue; end    % 
+    if El < 15  KKKK=KKKK+1; continue; end    % % %SAVE THESE, FOR EL<0
    
-    % if there are less than 5 data point in a profile, skip it.
-    if length(Ed490) < 5 M=M+1; continue; end
+    % if there are less than 10 data point in a profile, skip it.
+    if length(Ed490) < 10 M=M+1; continue; end
+    %compute blank based on Lilliefors test with alpha=0.01;
+     blankEd490=0; %default 
      Ed=Ed490;pr=p;
-  
+     for j=1:length(Ed)
+       B=lilliefors(Ed');
+       while B(2)<0.01 
+           J=find(pr>min(pr));
+          
+           if J<10 break; end%if too few deep values to characterize the blank
+           pr=pr(J);
+           minp=min(pr); %needed for future fits
+          % Ed=Ed(J);
+          % blankEd490=mean(Ed);
+           B=lilliefors(Ed');
+       end
          location.latitude=lat;location.longitude=lon;location.altitude = 0;
     t.year=str2num(datestr(time,'yyyy'));t.month=str2num(datestr(time,'mm'));t.day=str2num(datestr(time,'dd'));
     t.hour=str2num(datestr(time,'hh'));t.min=str2num(datestr(time,'MM'));t.sec=0; t.UTC=0;
-
-       L=length(Ed);
-       outNight490(counter+1:counter+L,1)=location.latitude;
-         outNight490(counter+1:counter+L,2)=location.longitude;
-         outNight490(counter+1:counter+L,3)=DateTimeUTC;
-         outNight490(counter+1:counter+L,4)=p; 
-         outNight490(counter+1:counter+L,5)=T;       
-         outNight490(counter+1:counter+L,6)=S;
-         outNight490(counter+1:counter+L,7)=Ed;    
-         outNight490(counter+1:counter+L,8)=ID;
+    JJ=find(p>minp);
+    p = p(JJ); T = T(JJ); S = S(JJ); Ed = Ed(JJ);
+    JJJ = find(p>50);
+       L=length(JJJ);
+   
+         darkout(counter+1:counter+L,1)=location.latitude;
+         darkout(counter+1:counter+L,2)=location.longitude;
+         darkout(counter+1:counter+L,3)=DateTimeUTC;
+         darkout(counter+1:counter+L,4)=p(JJJ); 
+         darkout(counter+1:counter+L,5)=T(JJJ);       
+         darkout(counter+1:counter+L,6)=S(JJJ);
+         darkout(counter+1:counter+L,7)=Ed(JJJ);    
+         darkout(counter+1:counter+L,8)=ID;
          counter=counter+L;
-       clear p pp pr Ed Ed490 II location time JJ
-       if mod(i,5000)==0
-           disp(i)
-       end
+         clear p pp pr Ed Ed490 II location time JJ JJJ
+     
+        
+       break
+     end
+     if (mod(i,5000)==0)
+         disp(i)
+     end
+    
 end
 
-%% Check for NaNs in temperature profiles:
-
-a = find(isnan(outNight490(:,5)));
-if ~isempty(a)
-outNight490(a,:)=NaN;
+%%  remove any lines with missing temperatures
+ a = find(isnan(darkout(:,5)));
+ if ~isempty(a)
+     darkout(a,:)=NaN;
+     
 for ii=1:8
-    cc = outNight490(:,ii);
+    cc = darkout(:,ii);
     c = ~isnan(cc);
-    outNight490(:,ii) = NaN;
+    darkout(:,ii) = NaN;
     cc = cc(c);
     for j=1:length(cc)
-        outNight490(j,ii) = cc(j);
+        darkout(j,ii) = cc(j);
     end
     
 end
 
-outNight490 = outNight490(1:find(isnan(outNight490(:,1)),1),:);
-
+darkout = darkout(1:find(isnan(darkout(:,1)),1),:);
 else 
-    outNight490(length(outNight490)+1,1:8) = NaN;  % Intentionally setting last line as NaNs
+    darkout(length(darkout)+1,1:8) = NaN;  % Intentionally setting the last line as NaNs
 end
-%% clear vars 
-clearvars -except outNight490 data490
+ 
+ %% clear vars 
+clearvars -except darkout data490
+
 
 %% 2
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -153,23 +176,21 @@ clearvars -except outNight490 data490
 %%%% TENV TO TINS
 
 
-cns=outNight490; 
-
-Tsen3=NaN(length(cns),9);   %Final Output w corrected temps, and everything else.
-x=1; %for Tenv index. resets to one with new lt
+cns=darkout; 
+Tsen3=NaN(length(cns),9);   %Final Output w corrected temps, and everything else. 
+x=1; %for Tenv index. resets to 1 with new lt. 
 Tenv=NaN(10,2);  %to extract Tenv from cns per profile
 Ts3 = NaN(2,1); %for use inside loops
 lt=cns(1,1); %current latitute
 plt=cns(1,1); %previous latitude
 cnt=1; %do not reset. row counter for Tsen
-n=1; %counter for Tsen(x,temp)=Ts(n,1) 
-
+n=1; %counter for Tsen(x,temp)=Ts(n,1); resets to 1
  K=200; %Time constant for function [s]
 
 for i=1:length(cns)
     lt=cns(i,1);
     
-    if lt==plt && ~isnan(lt) %same latitude
+    if lt==plt && ~isnan(lt) %same latitude. extract Tenv 
        Tenv(x,1)=cns(i,5); %temperature
        Tenv(x,2)=cns(i,4); %pressure for time calculation
         x=x+1;
@@ -187,67 +208,73 @@ for i=1:length(cns)
         temps = temps(c);
         pres = Tenv(:,2); 
         pres2 = pres(c);
-        if min(pres2)>250  %Tconversion only on p<=250
+        if min(pres2)>250   %Tconverion only on p<=250
                j=i-length(pres2);
             k=i-1;
-            for iii=j:k                
+            for iii=j:k
                 Tsen3(cnt,1)=cns(iii,1);
                 Tsen3(cnt,2)=cns(iii,2);
                 Tsen3(cnt,3)=cns(iii,3);
                 Tsen3(cnt,4)=cns(iii,4);
-                Tsen3(cnt,5)=cns(iii,5);     
+                Tsen3(cnt,5)=cns(iii,5);    
                 Tsen3(cnt,6)=cns(iii,5);
                 Tsen3(cnt,7)=cns(iii,6);
                 Tsen3(cnt,8)=cns(iii,7);
                 Tsen3(cnt,9)=cns(iii,8);
                 cnt=cnt+1;
-           
-                
+              % n=n+1;
+              
             end
+        
         else
-        cc = pres2<= 250; % consistent Ed readings begin @250db 
+        cc = pres2<= 250; % consistent Ed readings begin @250db  
         temps = temps(cc);
-        pres3 = pres2(cc);
+        pres3 = pres(cc);
         temps = flipud(temps);  % so T(deepest) is index 1
+       % time = pres3(length(pres3))/.1;  %total time in seconds for float to rise, assuming 0.1m/s
         time = (max(pres3)-min(pres3))/0.1;
         t = 0:(time/(length(temps)-1)):time; %array of times, same length as temps
-       % To=temps(1);         %T(0)
+      %  To=temps(1);         %T(0)
         ct=zeros(1);          %"current temp"
         Ts3=zeros(1,length(t));
         pres3 = flipud(pres3); %to fit w temps
-         %now convert Tenv to Ts
-         %if max(temps) - min(temps) > 3
+            
+        if length(temps)>4 %max(temps)-min(temps) > 2
              % calculate av dTdz for first 20db
              on = pres3(1);
-             w = find((pres2 < on - 20),1);
+             w = find((pres3 < on - 20),1);
              if ~isempty(w)
                  dT = temps(1:w);
                  dz = pres3(1:w);
                  fit = polyfit(dz,dT,1);
                  dTdt = fit(1);   
-                To = temps(1)+dTdt*20;
+                 To = temps(1)+dTdt*20;
              else
                  dT = temps(1:length(temps));
                  dz = pres3(1:length(pres3));
                  fit = polyfit(dz,dT,1);
-                 dTdt = fit(1);
-                 To = temps(1)+dTdt*(max(pres3)-min(pres3));
+                 dTdt = abs(fit(1));
+                 To = temps(1)-dTdt*(max(pres3)-min(pres3));
              end    
+         %now convert Tenv to Ts
             for ii=1:length(t)      %to calculate Tins 
              ct(ii)=temps(ii);
     
               intg=SensorTemp(ct,t(ii),K);           %function to return integral over current t range
     
-              % Ts(t)=T(0)e^(-t/K)+(e^(-t/K)int(0,t')Tenv(t')e^(t'/K)dt)/K
+              %Ts(t)=T(0)e^(-t/K)+(e^(-t/K)int(0,t')Tenv(t')e^(t'/K)dt)/K
               Ts3(ii)=To*exp(-t(ii)/K)+exp(-t(ii)/K)*intg; %creates Ts array of Sensor temps
+        
             end
-            
+        else 
+            Ts3 = temps';
+        end    
             %Now fill Tsen with Ts and all other data.            
             Ts3 = fliplr(Ts3); %inverted compared to rest of data
             j=i-length(pres2);
             k=i-1;
             for iii=j:k
-                if cns(iii,4)<= 250
+                if pres2(n)<250
                 Tsen3(cnt,1)=cns(iii,1);
                 Tsen3(cnt,2)=cns(iii,2);
                 Tsen3(cnt,3)=cns(iii,3);
@@ -270,6 +297,7 @@ for i=1:length(cns)
                 Tsen3(cnt,8)=cns(iii,7);
                 Tsen3(cnt,9)=cns(iii,8);
                 cnt=cnt+1;
+                n=n+1;
                 end
             end
         end
@@ -282,143 +310,95 @@ for i=1:length(cns)
         %now take out new Ts since we have lt=/=plt
        Tenv(x,1)=cns(i,5); %temperature
        Tenv(x,2)=cns(i,4);
-       x=x+1;
-       end  
-end
+       x=x+1;  
+      end
+  end
 
 Tsen3 = Tsen3(1:find(isnan(Tsen3(:,1)),1),:);
 
-clearvars -except outNight490 data490 Tsen3
-
+clearvars -except darkout data490 Tsen3
 
 
 %% 3
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%%% 3. DOWNWELLING IRRADIANCE TEST 
-%%%% DETECT AND REMOVE SECTIONS OF PROFILES DETECTING DOWNWELLING IRRADIANCE
-%%%% TESTS 150m, 100m, 50m TO SURFACE
+%%%% DETECT AND REMOVE PROFILES DETECTING DOWNWELLING IRRADIANCE
+%%%% 
 
-ns=Tsen3;         
+ns=Tsen3;   
+
 
 lt=1;   %latitude
 plt=0;  %must start different than lt for first profile
-Id = 0;
 fail=1;
-fail2=0; %second l-l test
-fail3=0; %third l-l test
-maxFail=0;
-ctL150=0; %light detected 150db-0
-ctL100=0; %light detected 100db-0
-ctL50=0; %light detected 50db-0
-ctT=0; %total profiles
+ctf=0;  % counts failed
+ctT = 0; %total profiles
 
-ctl=1;
+
+ 
 for i=1:length(ns)
+    pr=NaN(2,1); %reset
+    e=NaN(2,1);  %reset
     lt=ns(i,1);  %current latitude
     
-    if not(lt==plt) %when @new lat/profile
-        ctT = ctT+1;
-        ctl = 1; %reset ctl for counter at end
-        pr=NaN(2,1); %reset
-        e=NaN(2,1);  %reset
-        
-        for l=0:5000 %determine if new profile is good or bad
-                    % all profiles < 5000 readings
+    if not(lt==plt) %when @new lat/profile, determine FAIL as 1 or zero. 
+        ctT = ctT +1;
+        for l=0:1000 %determine if new profile is good or bad
+                    % also assuming no profile has more than 1000 values
                     
-           if ns(l+i,1)==lt && l+i < length(ns)-1 %if latitude is the same
+           if ns(l+i,1)==lt && l+i <length(Tsen3(:,1))%if latitude is the same
              %extract pr and e for current profile
              pr(l+1)=ns(l+i,4); %pressure
              e(l+1)=ns(l+i,8); % Ed
-             Id = ns(l+i,9);
+           
              
              else  %=@new latitude/profile. run calculation on current profile. 
-                %1. Filter downwelling light
+           
+           minEd = min(e);
+              for r=1:length(e)             %shift data so none are negative for log test
+                 e(r)=e(r)-minEd + 0.001;
+              end
+           
+             p=polyfit(pr,log(e),1);
              
-                minEd = min(e);
-                 for r=1:length(e)             %shift data so none are negative for log test
-                     e(r)=e(r)-minEd + 0.001;
-                 end
+             if p(1) < -0.01
+                  fail=1;
+                ns(i,:)=NaN;
+                ctf=ctf+1;
+              
+        %for visualizing if wanted
+%              pp=polyval(p,pr); 
+%              val=num2str(p);
+%              plot(pr,log(e),'*',pr,pp,'-') 
+%              set(gca,'LineWidth',1.5)
+%              xlabel('Pressure(db)')
+%              ylabel('log(E)')
+%             % xlabel(val)
+%              pause()
                
-                    cc= pr<150; %150 m to surface for test
-                    pr1=pr(cc);
-                    e1=e(cc);
-                    p=polyfit(pr1,log(e1),1);
-                    %begin test
-                    
-                    if p(1)<-0.01   %first log-lin test. 150m-surface
-                          fail=1;  %Fail - trend detected
-                          ns(i,:)=NaN; %remove surfacemost measurement
-                           y=pr<150; %
-                           ctL150=ctL150+1;
-                            for x=1:length(pr)
-                              if y(x)==1
-                                 pr(x)=NaN;  %remove upper 150 m of data
-                                 e(x)=NaN; 
-                              end
-                            end
-                            
-                    else %test 100m - surface
-                          y = 0; %reset
-                          y=pr<100; % to test 100m to surface
-                          %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  
-                          pr2=pr(y);
-                            e2=e(y);
-                             p=polyfit(pr2,log(e2),1);
-                                if p(1)<-0.01   %SECOND log-lin test. 100m-0
-                                     fail2=1;
-                                     ns(i,:)=NaN; %remove surfacemost measurement
-                                 ctL100=ctL100+1;
-                                for x=1:length(pr)
-                                     if y(x)==1
-                                     pr(x)=NaN;  %remove upper 100 m of data
-                                     e(x)=NaN; 
-                                     end
-                                end
-                                else
-                                  fail2=0;
-                                  y3=pr<50; %get pressures less than than 50
-                               
-                                  pr3=pr(y3);
-                                  e3=e(y3);
-                                   p=polyfit(pr3,log(e3),1);
-                                   if p(1)<-0.01   %THIRD log-lin test. 
-                                      fail3=1; %light detected
-                                     ctL50=ctL50+1;
-                                        for xxx=1:length(pr)
-                                         if y3(xxx)==1
-                                          pr(xxx)=NaN;  %remove upper 50 m of data
-                                          e(xxx)=NaN; 
-                                         end
-                                        end
-                                   else
-                                               fail3=0;
-                                   end
-                                end
-                       end  %end of light filter poly test
-                     
-             break 
-           end %if ns(l+i,1) == lt
-        end % for l=0:1000
-        
-   else 
-       % output amended ns
-     %  ns(i,:)=NaN;  
-      if isnan(pr(ctl)) %if pressure is NaN, make row NaN  
-         ns(i,:)=NaN;
-      end
-      ctl=ctl+1; %ctl to count pressure. resets when at new profile. 
-        
+             else
+               fail=0;
+             end
+                
+             break
+            
+           end      % if ns(l+i,1)==lt
+        end         %for l=1:1000
        
-      end     %if not(lt==plt)
+    else 
+       if fail==1 
+       ns(i,:)=NaN;  
+       end
+       
+    end     %if not(lt==plt)
     
     plt=lt;     
 end
 
 
+%% Remove NaNs/condense
 
-
-%% nans
 
 for i=1:9
     cc = ns(:,i);
@@ -431,10 +411,10 @@ for i=1:9
     
 end
 
-ns = ns(1:find(isnan(ns(:,1)),1),:);
+ns = ns(1:find(isnan(ns(:,2)),1),:); 
 
-clearvars -except outNight490 data490 Tsen3 ns
 
+clearvars -except darkout data490 Tsen3 ns
 
 
 %% 4
@@ -444,43 +424,43 @@ clearvars -except outNight490 data490 Tsen3 ns
 %%%% 
 %%%% REMOVE VALUES OUTSIDE [-0.3 0.3] W m-2 nm-1
 
-
-cns = ns;
+fns = ns;
 
 ctH = 0;
 ctL = 0;
-ctT = 0;
-fns = cns;
-for i = 1:length(cns)
-    if cns(i,8)> 0.03
+ctt = 0;
+for i = 1:length(fns)   
+    if fns(i,8)> 0.03
         fns(i,:) = NaN;
         ctH = ctH +1;
-        ctT = ctT +1;
+        ctt = ctt +1;
     end
-    if cns(i,8) < -0.03
+    if fns(i,8) < -0.03
         fns(i,:) = NaN;
         ctL = ctL +1;
-        ctT = ctT +1;
+        ctt = ctt +1;
     end
 end
 
 
-%% Condense NaNs
+%% Remove Nans
 
+ns2 = fns;
 for i=1:9
     cc = fns(:,i);
     c = ~isnan(cc);
-    fns(:,i) = NaN;
+    ns2(:,i) = NaN;
     cc = cc(c);
     for j=1:length(cc)
-        fns(j,i) = cc(j);
+        ns2(j,i) = cc(j);
     end
     
 end
 
-fns = fns(1:find(isnan(fns(:,1)),1),:);
-clearvars -except outNight490 data490 Tsen3 ns fns
 
+ns2 = ns2(1:(find(isnan(ns2(:,1)),1)),:);
+
+clearvars -except darkout data490 Tsen3 ns ns2
 
 %% 5
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -489,15 +469,16 @@ clearvars -except outNight490 data490 Tsen3 ns fns
 %%%% ROBUST LINEAR FIT ON COMPILED PROFILES PER FLOAT PER WAVELENGTH
 %%%% 1.5*IQR CONSTRAINT ACROSS ALL FLOATS dE/dT AT SAME WAVELENGTH
 
-%fns: 1. lat 2. long 3. time 4. pres 5. Tm 6. Ts 7. Sal 8. Ed 9. ID
 
-cns = fns;  
-N490_cors=NaN(1,8);
+%ns2: 1.lat 2.long 3.time 4.pres 5.Tm 6.Ts 7.Sal 8.Ed 9.ID
+
+cns = ns2; 
+D490_cors=NaN(1,8);
 short = 0; %counter 
 tt = 1;
 i = 1;
-Trangefail = 0;
-rhofail = 0;
+Trangefail = 0; 
+rhofail = 1;
 while tt < length(cns)
     Id=cns(tt,9);
     
@@ -507,12 +488,13 @@ while tt < length(cns)
     Ed = cns(a,8);
     p = cns(a,4); %to sort 
     
-    % robust fit on T vs Ed, pres 50-250 db
-    ccc = (p>=50);   %Calculate for Pressure>=50 db; 
-    t = t(ccc); %use t for median
-    Ed = Ed(ccc);
-    p = p(ccc);
+    % robust fit on T vs Ed, pres > 50 db
     
+     ccc = (p>=50);   %Calculate for Pressure>=50 db; 
+     t = t(ccc);
+     Ed = Ed(ccc);
+     p = p(ccc);
+     
     cc = (p <= 250);  %calculate for pressure <= 250
     t2 = t(cc);         %use t2, Ed2 for dE/dT
     Ed2 = Ed(cc);
@@ -520,7 +502,7 @@ while tt < length(cns)
     
     maxT = max(t2);
     minT = min(t2);
-    if mod(length(Ed2),2)==0 %Even # - median isn't real
+    if mod(length(Ed2),2)==0 %Even # - median DNE- use upper value
         Ed3 = sort(Ed2);
         c = find(Ed3 > median(Ed2),1);
         c = find(Ed2 == Ed3(c),1); %index of median+ 
@@ -528,20 +510,20 @@ while tt < length(cns)
         c = find(Ed2 == median(Ed2),1);
     end
     TmedEd = t2(c);
-   % t2=t2-minT; %sets y intercept @ Tmin
     
-    if length(t)>5 %else too few to characterize blank  
-     if maxT - minT > 2.5   %if Trange < 2.5, no dE/dT; use median
-     [p2,stats]=robustfit(t2,Ed2);
-     q=stats.se;
-     s=stats.s;
-     rho = corr(t2,Ed2,'Type','Spearman');
-         if abs(rho) < 0.3 % No temp correlation found
+    if length(t2)>5 %else too few to characterize blank
+      if (maxT-minT) > 2.5 %if Trange < 2.5 use median
+        [p2,stats]=robustfit(t2,Ed2);
+         q=stats.se;
+         s=stats.s;
+         rho = corr(t2,Ed2,'Type','Spearman');
+         
+         if abs(rho) < 0.3  %No temp correlation found
            p2(1) = median(Ed2);
            p2(2) = 0;
            rhofail = rhofail+1;
          end
-     else
+      else
          Trangefail = Trangefail +1; 
          p2(1) = median(Ed2);
          p2(2) = 0;
@@ -549,22 +531,22 @@ while tt < length(cns)
          q(2) = iqr(Ed2);
          rho = corr(t2,Ed2,'Type','Spearman');
      end
-    
-    N490_cors(i,1)=Id;
-    N490_cors(i,2)=p2(1); %yintercept x0
-    N490_cors(i,3)=p2(2); %slope  x1
-    N490_cors(i,4)=q(1); %yintercept se
-    N490_cors(i,5)=q(2); %slope se
-    N490_cors(i,6)=maxT;
-    N490_cors(i,7)=minT;
-    N490_cors(i,8)=rho;   %Spearman's Rank Coefficient
-    N490_cors(i,9)=median(Ed2);
-    N490_cors(i,10)=prctile(Ed,2);
-    N490_cors(i,11)=prctile(Ed,98);
-    N490_cors(i,12) = TmedEd;
-    N490_cors(i,13)=0;
+    D490_cors(i,1)=Id;
+    D490_cors(i,2)=p2(1); %yintercept x0
+    D490_cors(i,3)=p2(2); %slope  x1
+    D490_cors(i,4)=q(1); %yintercept se
+    D490_cors(i,5)=q(2); %slope se
+    D490_cors(i,6)=maxT;
+    D490_cors(i,7)=minT;
+    D490_cors(i,8)=rho;   %Spearman's Rank coefficient
+    D490_cors(i,9)=median(Ed2);
+    D490_cors(i,10)=prctile(Ed,2); 
+    D490_cors(i,11)=prctile(Ed,98);
+    D490_cors(i,12) = TmedEd;
+    D490_cors(i,13) = 0;
     i = i+1;
-    
+    % 1. Id 2. x0 3. x1 4. x0se 5. x1se 6. maxT 7. minT 8. rho 9. med(Ed2)
+    % 10. 2% 11. 98% 12. T(medEd) 13. bool
     else
         short = short+1;
     end
@@ -574,53 +556,45 @@ clear a
 end
 
 
-
-
-%% Filter for 1.5IQR 
-N = N490_cors;
-tt = find(~(N490_cors(:,3)==0));
+%% 1.5*IQR filter
+N = D490_cors;
+NN = D490_cors;
+tt = find(~(D490_cors(:,3)==0));
 N = N(tt,:);            %IQR test for those w/ dE/dT =/= 0 
-
   x1iqr = iqr(N(:,3));
   x1med = median(N(:,3));
-
   x1lb = x1med - 1.5*x1iqr;
   x1ub = x1med + 1.5*x1iqr;
   
   ct = 0;
   ct2 = 0;
   ctt = 0;
-  G490cors = zeros(length(N490_cors),13); %the goods
+  G490cors = zeros(length(D490_cors),13); %the goods
   % G490cors is:
    % 1. Id 2. x0 3. x1 4. x0se 5. x1se 6. maxT 7. minT 8. rho 9. med(Ed2)
     % 10. 2% 11. 98% 12. T(medEd) 13. bool
-    
-for i=1:length(N490_cors)  %check IQR, save only those that pass
-    x1 = N490_cors(i,3);
-    
+for i=1:length(D490_cors)  %check IQR, save only those that pass
+    ID = NN(i,1);
+    x1 = NN(i,3);
+    %pass if x0,x1 <= |1.5*iqr() +/- med|
     if x1 > x1ub
-        N490_cors(i,3) = x1ub;
-        N490_cors(i,2) = N490_cors(i,9) - (x1ub*(N490_cors(i,12))); %x0
-        N490_cors(i,13) = 1;
+        D490_cors(i,3) = x1ub;
+        D490_cors(i,2) = D490_cors(i,9) - (x1ub*(D490_cors(i,12))); %x0
+       D490_cors(i,13) = 1;
         ct = ct+1;
         ctt = ctt+1;
-   
-    else
-         
-        if x1 < x1lb
-        N490_cors(i,3) = x1lb;
-       N490_cors(i,2) = N490_cors(i,9) - (x1lb*(N490_cors(i,12))); %x0
-        N490_cors(i,13) = 1;
+    end
+    if x1<x1lb
+        D490_cors(i,3) = x1lb;
+        D490_cors(i,2) = D490_cors(i,9) - (x1lb*(D490_cors(i,12))); %x0
+         D490_cors(i,13) = 1;
         ct2 = ct2+1;
-         ctt = ctt+1;
-         
-        end
+        ctt = ctt+1;
     end
 
- G490cors(i,1:13) = N490_cors(i,1:13);
+ G490cors(i,1:13) = D490_cors(i,1:13);
 
 end
-
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -644,3 +618,95 @@ end
 end
 
 
+
+
+
+
+
+
+
+
+
+ %%
+function [Results]=lilliefors(x)
+% KOLMOGOROV-SMIRNOV TEST - LILLIEFORS MODIFICATION
+alpha=0.01;
+n=length(x);
+i=1:n;
+y=sort(x);
+fx=normcdf(zscore(y));
+dplus=max(abs(fx-i/n));
+dminus=max(abs(fx-(i-1)/n));
+Dn=max(dplus,dminus);
+% P = [n D20 D15]
+P=[5 0.289 0.303;
+   6 0.269 0.281;
+   7 0.252 0.264;
+   8 0.239 0.250;
+   9 0.227 0.238;
+   10 0.217 0.228;
+   11 0.208 0.218;
+   12 0.200 0.210;
+   13 0.193 0.202;
+   14 0.187 0.196;
+   15 0.181 0.190;
+   16 0.176 0.184;
+   17 0.171 0.179;
+   18 0.167 0.175;
+   19 0.163 0.170;
+   20 0.159 0.166;
+   25 0.143 0.150;
+   30 0.131 0.138;
+   40 0.115 0.120;
+   100 0.074 0.077;
+   400 0.037 0.039;
+   900 0.025 0.026];
+ 
+aaa=P(:,1)';
+subind=max(find(aaa<n));
+upind=subind+1;
+if (subind==22) upind=subind; subind=subind-1; end
+xxx=P(subind:upind,:);
+ 
+if aaa(upind)==n
+   D20=xxx(2,2);
+   D15=xxx(2,3);
+else
+    D20=xxx(1,2)+(n-aaa(subind))*((xxx(2,2)-xxx(1,2))/(xxx(2,1)-xxx(1,1)));
+    D15=xxx(1,3)+(n-aaa(subind))*((xxx(2,3)-xxx(1,3))/(xxx(2,1)-xxx(1,1)));
+end
+ 
+a1=-7.01256*(n+2.78019);
+b1=2.99587*sqrt(n+2.78019);
+c1=2.1804661+0.974598/sqrt(n)+1.67997/n;
+ 
+a2=-7.90289126054*(n^0.98);
+b2=3.180370175721*(n^0.49);
+c2=2.2947256;
+ 
+if n>100
+   D10=(-b2-sqrt(b2^2-4*a2*c2))/(2*a2);
+   a=a2;
+   b=b2;
+   c=c2;
+else
+   D10=(-b1-sqrt(b1^2-4*a1*c1))/(2*a1);
+   a=a1;
+   b=b1;
+   c=c1;
+end
+ 
+if Dn==D10
+        pvalue=0.10;
+    elseif Dn>D10
+        pvalue=exp(a*Dn^2+b*Dn+c-2.3025851);
+    elseif Dn>=D15
+        pvalue=((0.10-0.15)/(D10-D15))*(Dn-D15)+0.15;
+    elseif Dn>=D20
+       pvalue=((0.15-0.20)/(D15-D20))*(Dn-D20)+0.20;
+    else
+       pvalue=0.20;
+end
+Results(1)=Dn;
+Results(2)=pvalue;
+end

@@ -445,7 +445,7 @@ outc = zeros(10000,14);
            M1x1 = Ncors(a,3);
            
        outc(x:x+length(bb),1:10) = out(ii:ii+length(bb),1:10);    
-       outc(x:x+length(bb),11) = (M1x0 + M1x1*(out(ii:ii+length(bb),6)));%value of correction M1
+       outc(x:x+length(bb),11) = (M1x0 + M1x1*(out(ii:ii+length(bb),6)));%value of correction M1 Night
        outc(x:x+length(bb),12) = out(ii:ii+length(bb),7) - (M1x0 + M1x1*(out(ii:ii+length(bb),6))); %corrected Ed
        x = x+length(bb);
        ii = ii+ length(bb);
@@ -458,7 +458,7 @@ outc = zeros(10000,14);
               M2x1 = Dcors(b,3);
            
              outc(x:x+length(bb),1:10) = out(ii:ii+length(bb),1:10);    
-             outc(x:x+length(bb),11) = (M2x0 + M2x1*(out(ii:ii+length(bb),6)));%value of correction M1
+             outc(x:x+length(bb),11) = (M2x0 + M2x1*(out(ii:ii+length(bb),6)));%value of correction M2 day
               outc(x:x+length(bb),12) = out(ii:ii+length(bb),7) - (M2x0 + M2x1*(out(ii:ii+length(bb),6))); %corrected Ed
                 x = x+length(bb);
                  ii = ii+ length(bb);

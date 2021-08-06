@@ -1,7 +1,7 @@
 % POST-PROCESS QUALITY CONTROL BGC ARGO RADIOMETRY 
 % CALCULATE SENSOR-TEMPERATURE DEPENDENT CORRECTION
 % NIGHT METHOD
-% UPDATED 6.23.2021
+% UPDATED 8.2.2021
 % author: Terence O'Brien
 % terence.obrien@maine.edu
 
@@ -13,7 +13,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%%% 1. LOAD DATA, ASSESS NIGHT PROFILES FOLLOWING QUALITY CONTROL PROCEDURES FROM ORGANELLI 2016
-%%%% SCRIPT 1 ADAPTED FROM EMMANUEL BOSS
+%%%% SECTION 1 ADAPTED FROM EMMANUEL BOSS
 
 clear all
 close all
@@ -22,10 +22,13 @@ close all
 
 load data490.mat %- use for 490 & 412
 %load data380.mat
+%data490 = data380; % for ease- if using data 380 don't
+%                           need to change variable name throughout script
 
 % ^need to change variables throughout script when changing from 380 to 490
 % check before replacing
 %% 
+
 A=data490.Properties.VariableNames;
 for i=1:length(A)
     I(1,i)=isempty(find(string(A{1,i})=='dt'));
@@ -45,10 +48,10 @@ for i=1:length(A)
     I(15,i)=isempty(find(string(A{1,i})=='BBP532'));
     I(16,i)=isempty(find(string(A{1,i})=='BBP700'));
     I(17,i)=isempty(find(string(A{1,i})=='DOWNWELLING_PAR'));
-    I(18,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE380'));
-    I(19,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE412'));
-    I(20,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE443'));
-    I(21,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE490'));
+    I(18,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE380')); %**
+    I(19,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE412')); %**
+    I(20,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE443')); 
+    I(21,i)=isempty(find(string(A{1,i})=='DOWN_IRRADIANCE490')); %**
     I(22,i)=isempty(find(string(A{1,i})=='WMO')); %float ID
 end
 
@@ -71,9 +74,9 @@ for i=1:length(data490{:,1}) %analysis is performed a profile at a time
     i;
     Flag1;
     % getting the profiles and test that we want to keep them
-    Ed490=cell2mat(data490{i,ind(18)})*100;  %miltiply by 100 for comparison with Organelli's units
-                            % ^^^^^ !!! index is wavelength specific
-                        
+    Ed490=cell2mat(data490{i,ind(19)})*100;  %miltiply by 100 for comparison with Organelli's units
+                            % ^^^^^ !!! index is wavelength specific 
+                            
     p=cell2mat(data490{i,ind(4)}); T=cell2mat(data490{i,ind(5)});S=cell2mat(data490{i,ind(6)});ID=data490{i,ind(22)};
     lat=data490{i,ind(2)};lon=data490{i,ind(3)};time=data490{i,ind(1)};
     %plot(Ed490,-p,'*')
@@ -90,7 +93,7 @@ for i=1:length(data490{:,1}) %analysis is performed a profile at a time
     if isempty(II)  KKK=KKK+1; continue; end  
     %testing that solar elevation is above 15degrees
     DateTimeUTC=time;
-    [Az,El] = SolarAzEl(DateTimeUTC,lat,lon,0);
+    [Az,El] = SolarAzEl(DateTimeUTC,lat,lon,0); %(Koblick 2021)
     %detect only reasonable values
     if El >0   KKKK=KKKK+1; continue; end    % 
    
@@ -235,12 +238,10 @@ for i=1:length(cns)
     
               intg=SensorTemp(ct,t(ii),K);           %function to return integral over current t range
     
-              %Ts(t)=T(0)e^(-t/K)+(e^(-t/K)int(0,t')Tenv(t')e^(t'/K)dt)/K
+              % Ts(t)=T(0)e^(-t/K)+(e^(-t/K)int(0,t')Tenv(t')e^(t'/K)dt)/K
               Ts3(ii)=To*exp(-t(ii)/K)+exp(-t(ii)/K)*intg; %creates Ts array of Sensor temps
             end
-        % else
-          %   Ts3 = temps';
-         %end  
+            
             %Now fill Tsen with Ts and all other data.            
             Ts3 = fliplr(Ts3); %inverted compared to rest of data
             j=i-length(pres2);
@@ -448,15 +449,18 @@ cns = ns;
 
 ctH = 0;
 ctL = 0;
+ctT = 0;
 fns = cns;
 for i = 1:length(cns)
     if cns(i,8)> 0.03
         fns(i,:) = NaN;
         ctH = ctH +1;
+        ctT = ctT +1;
     end
     if cns(i,8) < -0.03
         fns(i,:) = NaN;
         ctL = ctL +1;
+        ctT = ctT +1;
     end
 end
 
@@ -492,6 +496,8 @@ N490_cors=NaN(1,8);
 short = 0; %counter 
 tt = 1;
 i = 1;
+Trangefail = 0;
+rhofail = 0;
 while tt < length(cns)
     Id=cns(tt,9);
     
@@ -517,6 +523,7 @@ while tt < length(cns)
     if mod(length(Ed2),2)==0 %Even # - median isn't real
         Ed3 = sort(Ed2);
         c = find(Ed3 > median(Ed2),1);
+        c = find(Ed2 == Ed3(c),1); %index of median+ 
     else                    %odd number; median index exists
         c = find(Ed2 == median(Ed2),1);
     end
@@ -532,8 +539,10 @@ while tt < length(cns)
          if abs(rho) < 0.3 % No temp correlation found
            p2(1) = median(Ed2);
            p2(2) = 0;
+           rhofail = rhofail+1;
          end
      else
+         Trangefail = Trangefail +1; 
          p2(1) = median(Ed2);
          p2(2) = 0;
          q(1) = iqr(Ed2);
@@ -580,6 +589,7 @@ N = N(tt,:);            %IQR test for those w/ dE/dT =/= 0
   
   ct = 0;
   ct2 = 0;
+  ctt = 0;
   G490cors = zeros(length(N490_cors),13); %the goods
   % G490cors is:
    % 1. Id 2. x0 3. x1 4. x0se 5. x1se 6. maxT 7. minT 8. rho 9. med(Ed2)
@@ -593,6 +603,7 @@ for i=1:length(N490_cors)  %check IQR, save only those that pass
         N490_cors(i,2) = N490_cors(i,9) - (x1ub*(N490_cors(i,12))); %x0
         N490_cors(i,13) = 1;
         ct = ct+1;
+        ctt = ctt+1;
    
     else
          
@@ -601,6 +612,8 @@ for i=1:length(N490_cors)  %check IQR, save only those that pass
        N490_cors(i,2) = N490_cors(i,9) - (x1lb*(N490_cors(i,12))); %x0
         N490_cors(i,13) = 1;
         ct2 = ct2+1;
+         ctt = ctt+1;
+         
         end
     end
 

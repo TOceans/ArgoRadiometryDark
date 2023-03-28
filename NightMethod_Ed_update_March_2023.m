@@ -80,7 +80,7 @@ for i=1:length(data490{:,1}) %analysis is performed a profile at a time
     i;
     Flag1;
     % getting the profiles and test that we want to keep them
-    Ed490=cell2mat(data490{i,ind(14)})*100;  %miltiply by 100 for comparison with Organelli's units
+    Ed490=cell2mat(data490{i,ind(14)});  %Output in W m-2 s-2; miltiply by 100 for comparison with Organelli's units
                             % ^^^^^ !!! index is wavelength specific 14=380
                             % 15 = 412 17 = 490 
                             

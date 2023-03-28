@@ -80,7 +80,7 @@ for i=1:length(data490{:,1}) %analysis is performed a profile at a time
     i;
     Flag1;
     % getting the profiles and test that we want to keep them
-    Ed490=cell2mat(data490{i,ind(13)})*100;  %miltiply by 100 for comparison with Organelli's units
+    Ed490=cell2mat(data490{i,ind(13)});  %PAR output in umol quanta m-2 s-1
                             % ^^^^^ !!! index is wavelength specific PAR = 13 
                             %  14=380 15 = 412 17 = 490         
     p=cell2mat(data490{i,ind(4)}); T=cell2mat(data490{i,ind(5)});S=cell2mat(data490{i,ind(6)});ID=data490{i,ind(18)};

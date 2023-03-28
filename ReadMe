@@ -3,3 +3,8 @@ Sensor-temperature dependent BGC-Argo Radiometry dark correction
 Save final files from Nightmethod.m and Daymethod.m and call on them in Applycorrection.m
 
 Applycorrection is really for comparison between the methods and should be adjusted to suit needs
+
+Errata March 2023 submitted: final data used in https://doi.org/10.3390/s22186771 had misreported units. 
+
+Results in the paper should be scaled by a factor of 10^-2. 
+
